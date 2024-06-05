@@ -93,10 +93,14 @@ vim.g.maplocalleader = ' '
 -- Set to true if you have a Nerd Font installed
 vim.g.have_nerd_font = false
 
+vim.g.loaded_netrw = 1
+vim.g.loaded_netrwPlugin = 1
+
 -- [[ Setting options ]]
 -- See `:help vim.opt`
 -- NOTE: You can change these options as you wish!
 --  For more options, you can see `:help option-list`
+vim.opt.termguicolors = true
 
 -- Make line numbers default
 vim.opt.number = true
@@ -154,6 +158,9 @@ vim.opt.cursorline = true
 -- Minimal number of screen lines to keep above and below the cursor.
 vim.opt.scrolloff = 10
 
+-- Tab size
+vim.opt.tabstop = 4
+
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
 
@@ -189,6 +196,9 @@ vim.keymap.set('n', '<C-h>', '<C-w><C-h>', { desc = 'Move focus to the left wind
 vim.keymap.set('n', '<C-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
 vim.keymap.set('n', '<C-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
 vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
+
+-- Debugger breakpoint symbols
+vim.fn.sign_define('DapBreakpoint', { text = '🔴', texthl = '', linehl = '', numhl = '' })
 
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
@@ -226,6 +236,123 @@ vim.opt.rtp:prepend(lazypath)
 -- NOTE: Here is where you install your plugins.
 require('lazy').setup({
   -- NOTE: Plugins can be added with a link (or for a github repo: 'owner/repo' link).
+  'github/copilot.vim',
+  {
+    'ggandor/leap.nvim',
+    config = function()
+      require('leap').set_default_keymaps()
+      vim.keymap.set('n', 'f', '<Plug>(leap-forward)', {})
+      vim.keymap.set('n', 'F', '<Plug>(leap-backward)', {})
+    end,
+  },
+
+  --  Debugger
+  {
+    'mfussenegger/nvim-dap',
+    config = function()
+      local dap = require 'dap'
+      dap.adapters.node2 = {
+        type = 'executable',
+        command = 'node',
+        args = { os.getenv 'HOME' .. '/.vscode/extensions/ms-vscode.node-debug2-1.42.5/out/src/nodeDebug.js' },
+      }
+
+      dap.configurations.typescript = {
+        {
+          name = 'Launch',
+          type = 'node2',
+          request = 'launch',
+          program = '${file}',
+          cwd = vim.fn.getcwd(),
+          sourceMaps = true,
+          protocol = 'inspector',
+          console = 'integratedTerminal',
+          outFiles = { '${workspaceFolder}/dist/**/*.js' },
+        },
+        {
+          name = 'NestJS: Launch',
+          type = 'node2',
+          request = 'launch',
+          program = '${workspaceFolder}/dist/main.js', -- Asegúrate de que esta ruta es correcta
+          cwd = vim.fn.getcwd(),
+          sourceMaps = true,
+          protocol = 'inspector',
+          console = 'integratedTerminal',
+          outFiles = { '${workspaceFolder}/dist/**/*.js' },
+          runtimeArgs = { '--nolazy' },
+          env = {
+            NODE_ENV = 'development',
+          },
+          args = { 'sync-store-items' },
+        },
+        {
+          name = 'Attach to NestJS',
+          type = 'node2',
+          request = 'attach',
+          processId = require('dap.utils').pick_process,
+          cwd = vim.fn.getcwd(),
+          sourceMaps = true,
+          protocol = 'inspector',
+          console = 'integratedTerminal',
+          outFiles = { '${workspaceFolder}/dist/**/*.js' },
+        },
+      }
+
+      vim.keymap.set('n', '<F5>', function()
+        dap.continue()
+      end, { noremap = true, silent = true })
+      vim.keymap.set('n', '<F10>', function()
+        dap.step_over()
+      end, { noremap = true, silent = true })
+      vim.keymap.set('n', '<F11>', function()
+        dap.step_into()
+      end, { noremap = true, silent = true })
+      vim.keymap.set('n', '<F12>', function()
+        dap.step_out()
+      end, { noremap = true, silent = true })
+      vim.keymap.set('n', '<Leader>b', function()
+        dap.toggle_breakpoint()
+      end, { noremap = true, silent = true })
+      vim.keymap.set('n', '<Leader>B', function()
+        dap.set_breakpoint(vim.fn.input 'Breakpoint condition: ')
+      end, { noremap = true, silent = true })
+      vim.keymap.set('n', '<Leader>lp', function()
+        dap.set_breakpoint(nil, nil, vim.fn.input 'Log point message: ')
+      end, { noremap = true, silent = true })
+      vim.keymap.set('n', '<Leader>dr', function()
+        dap.repl.open()
+      end, { noremap = true, silent = true })
+      vim.keymap.set('n', '<Leader>dl', function()
+        dap.run_last()
+      end, { noremap = true, silent = true })
+    end,
+  },
+
+  -- Debugger UI
+  {
+    'rcarriga/nvim-dap-ui',
+    requires = { 'mfussenegger/nvim-dap' },
+    config = function()
+      require('dapui').setup()
+    end,
+  },
+
+  -- Mason integration for DAP
+  {
+    'jay-babu/mason-nvim-dap.nvim',
+    requires = { 'williamboman/mason.nvim', 'mfussenegger/nvim-dap' },
+    config = function()
+      require('mason-nvim-dap').setup {
+        ensure_installed = { 'node2' }, -- Asegúrate de que el depurador de Node.js esté instalado
+        automatic_installation = true, -- Instalación automática si faltan depuradores
+      }
+    end,
+  },
+
+  {
+    'nvim-neotest/nvim-nio',
+  },
+
   'tpope/vim-sleuth', -- Detect tabstop and shiftwidth automatically
 
   -- NOTE: Plugins can also be added by using a table,
@@ -740,12 +867,14 @@ require('lazy').setup({
       -- Load the colorscheme here.
       -- Like many other themes, this one has different styles, and you could load
       -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'tokyonight-night'
+      vim.cmd.colorscheme 'catppuccin'
 
       -- You can configure highlights by doing something like:
       vim.cmd.hi 'Comment gui=none'
     end,
   },
+
+  { 'catppuccin/nvim', name = 'catppuccin', priority = 1000 },
 
   -- Highlight todo, notes, etc in comments
   { 'folke/todo-comments.nvim', event = 'VimEnter', dependencies = { 'nvim-lua/plenary.nvim' }, opts = { signs = false } },
@@ -815,6 +944,38 @@ require('lazy').setup({
       --    - Incremental selection: Included, see `:help nvim-treesitter-incremental-selection-mod`
       --    - Show your current context: https://github.com/nvim-treesitter/nvim-treesitter-context
       --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
+    end,
+  },
+  {
+    'nvim-tree/nvim-tree.lua',
+    event = 'VimEnter',
+    lazy = true,
+    dependencies = { 'nvim-tree/nvim-web-devicons' },
+    config = function()
+      require('nvim-tree').setup {
+        -- auto_close = true,
+        -- update_focused_file = { enable = true },
+        -- view = { width = 30 },
+      }
+    end,
+  },
+  {
+    'stevearc/oil.nvim',
+    dependencies = { 'nvim-tree/nvim-web-devicons' },
+    config = function()
+      require('oil').setup {
+        columns = { 'icon' },
+        keymaps = {
+          ['<C-h>'] = false,
+          ['<M-h>'] = 'actions.select_split',
+        },
+        view_options = {
+          show_hidden = true,
+        },
+      }
+
+      vim.keymap.set('n', '-', '<CMD>Oil<CR>', { desc = 'Open parent directory' })
+      vim.keymap.set('n', '<space>-', require('oil').toggle_float, { desc = 'Toggle floating' })
     end,
   },
 
